@@ -279,6 +279,23 @@ class StrictSchemaRegressionTest(unittest.TestCase):
 
 
 class CurrentHeadReviewRegressionTest(unittest.TestCase):
+    def test_pending_review_without_submission_is_ignored(self) -> None:
+        payload = copy_payload()
+        pull_request(payload)["reviews"]["nodes"].append(
+            {
+                "author": {"login": "viewer"},
+                "state": "PENDING",
+                "submittedAt": None,
+                "commit": None,
+            }
+        )
+
+        result = classify_payload("owner/repo", 17, payload, observed_at=OBSERVED_AT)
+
+        self.assertEqual(result["classification"], "merge-ready")
+        self.assertEqual(result["schema_errors"], [])
+        self.assertEqual(len(result["reviews"]["items"]), 1)
+
     def test_old_head_approval_cannot_satisfy_merge_readiness(self) -> None:
         payload = copy_payload()
         pr = pull_request(payload)
@@ -352,6 +369,57 @@ class CurrentHeadReviewRegressionTest(unittest.TestCase):
 
 
 class DeterministicNormalizationRegressionTest(unittest.TestCase):
+    def test_neutral_and_skipped_checks_match_a_successful_rollup(self) -> None:
+        for conclusion in ("NEUTRAL", "SKIPPED"):
+            with self.subTest(conclusion=conclusion):
+                payload = copy_payload()
+                pr = pull_request(payload)
+                check = (
+                    pr["commits"]["nodes"][0]["commit"]
+                    ["statusCheckRollup"]["contexts"]["nodes"][0]
+                )
+                check["conclusion"] = conclusion
+
+                result = classify_payload(
+                    "owner/repo", 17, payload, observed_at=OBSERVED_AT
+                )
+
+                self.assertEqual(result["classification"], "merge-ready")
+                self.assertEqual(result["schema_errors"], [])
+
+    def test_queued_rerun_without_started_at_supersedes_old_failure(self) -> None:
+        payload = copy_payload()
+        pr = pull_request(payload)
+        rollup = pr["commits"]["nodes"][0]["commit"]["statusCheckRollup"]
+        old_failure = rollup["contexts"]["nodes"][0]
+        old_failure.update(
+            {
+                "databaseId": 100,
+                "conclusion": "FAILURE",
+                "startedAt": "2026-08-30T09:00:00Z",
+                "completedAt": "2026-08-30T09:01:00Z",
+            }
+        )
+        queued = json.loads(json.dumps(old_failure))
+        queued.update(
+            {
+                "databaseId": 101,
+                "status": "QUEUED",
+                "conclusion": None,
+                "startedAt": None,
+                "completedAt": None,
+            }
+        )
+        rollup["state"] = "PENDING"
+        rollup["contexts"]["nodes"].append(queued)
+
+        result = classify_payload("owner/repo", 17, payload, observed_at=OBSERVED_AT)
+
+        self.assertEqual(result["classification"], "checks-pending")
+        self.assertEqual(result["schema_errors"], [])
+        self.assertEqual(len(result["checks"]), 1)
+        self.assertEqual(result["checks"][0]["status"], "QUEUED")
+
     def test_distinct_review_thread_ids_survive_normalization_and_reordering(self) -> None:
         payload = copy_payload()
         pr = pull_request(payload)
@@ -642,6 +710,7 @@ class GitHubClientTest(unittest.TestCase):
         self.assertNotIn("--input", calls[0][0])
         self.assertTrue(calls[0][1]["check"])
         self.assertIn("reviewThreads(first: 100)", READ_ONLY_QUERY)
+        self.assertIn("databaseId", READ_ONLY_QUERY)
         self.assertIn("\n          id\n", READ_ONLY_QUERY)
 
     def test_graphql_schema_error_is_nonretryable_despite_connection_type_name(self) -> None:

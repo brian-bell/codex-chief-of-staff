@@ -29,7 +29,7 @@ query($owner: String!, $name: String!, $number: Int!) {
                 nodes {
                   __typename
                   ... on CheckRun {
-                    name status conclusion detailsUrl startedAt completedAt
+                    databaseId name status conclusion detailsUrl startedAt completedAt
                   }
                   ... on StatusContext { context state targetUrl createdAt }
                 }

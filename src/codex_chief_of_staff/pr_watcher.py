@@ -25,8 +25,9 @@ TRANSIENT_CHECK_CONCLUSIONS = frozenset(
     {"CANCELLED", "STALE", "STARTUP_FAILURE", "TIMED_OUT"}
 )
 FAILED_CHECK_CONCLUSIONS = frozenset(
-    {"ACTION_REQUIRED", "FAILURE", "NEUTRAL", "SKIPPED"}
+    {"ACTION_REQUIRED", "FAILURE"}
 )
+SUCCESSFUL_CHECK_CONCLUSIONS = frozenset({"SUCCESS", "NEUTRAL", "SKIPPED"})
 VALID_REVIEW_DECISIONS = frozenset(
     {None, "APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED"}
 )
@@ -204,6 +205,7 @@ def _canonical(value: object) -> str:
 def _select_latest(
     candidates: list[dict[str, object]], *, identity_fields: tuple[str, ...],
     timestamp_field: str, path: str, errors: list[str],
+    sequence_field: str | None = None,
 ) -> list[dict[str, object]]:
     groups: dict[tuple[object, ...], list[dict[str, object]]] = {}
     for candidate in candidates:
@@ -212,8 +214,24 @@ def _select_latest(
     selected = []
     for identity in sorted(groups, key=lambda key: tuple(str(item) for item in key)):
         group = groups[identity]
-        latest_time = max(str(item[timestamp_field] or "") for item in group)
-        latest = [item for item in group if str(item[timestamp_field] or "") == latest_time]
+        sequence_values = (
+            [item.get(sequence_field) for item in group] if sequence_field else []
+        )
+        if sequence_values and any(value is not None for value in sequence_values):
+            if any(value is None for value in sequence_values):
+                errors.append(f"{path} has incomplete attempt sequence identifiers")
+            latest_sequence = max(
+                int(value) for value in sequence_values if value is not None
+            )
+            latest = [
+                item for item in group if item.get(sequence_field) == latest_sequence
+            ]
+        else:
+            latest_time = max(str(item[timestamp_field] or "") for item in group)
+            latest = [
+                item for item in group
+                if str(item[timestamp_field] or "") == latest_time
+            ]
         variants = {_canonical(item): item for item in latest}
         if len(variants) > 1:
             errors.append(f"{path} has ambiguous attempts with the same timestamp")
@@ -263,6 +281,12 @@ def _normalize_checks(
             continue
         kind = item.get("__typename")
         if kind == "CheckRun":
+            database_id = item.get("databaseId")
+            if database_id is not None and (
+                type(database_id) is not int or database_id < 1
+            ):
+                errors.append(f"check run {index} databaseId is invalid")
+                database_id = None
             name = _safe_text(
                 item.get("name"), f"check run {index} name", errors,
                 limit=MAX_NAME_LENGTH,
@@ -299,6 +323,7 @@ def _normalize_checks(
                         "kind": "check-run", "name": name, "status": status,
                         "conclusion": conclusion, "url": url,
                         "started_at": started_at, "completed_at": completed_at,
+                        "_database_id": database_id,
                     }
                 )
         elif kind == "StatusContext":
@@ -329,6 +354,7 @@ def _normalize_checks(
                         ),
                         "conclusion": state, "url": url,
                         "started_at": created_at, "completed_at": None,
+                        "_database_id": None,
                     }
                 )
         else:
@@ -336,7 +362,10 @@ def _normalize_checks(
     checks = _select_latest(
         candidates, identity_fields=("kind", "name"), timestamp_field="started_at",
         path="statusCheckRollup.contexts", errors=errors,
+        sequence_field="_database_id",
     )
+    for check in checks:
+        check.pop("_database_id", None)
     if not checks:
         errors.append("statusCheckRollup has no current check contexts")
     else:
@@ -350,7 +379,9 @@ def _normalize_checks(
             or check["conclusion"] in {"ERROR", "FAILURE"}
             for check in checks
         )
-        all_success = all(check["conclusion"] == "SUCCESS" for check in checks)
+        all_success = all(
+            check["conclusion"] in SUCCESSFUL_CHECK_CONCLUSIONS for check in checks
+        )
         contradiction = (
             (failed and rollup_state not in {"ERROR", "FAILURE"})
             or (not failed and pending and rollup_state not in {"EXPECTED", "PENDING"})
@@ -388,6 +419,8 @@ def _normalize_reviews(
         if state not in VALID_REVIEW_STATES:
             errors.append(f"review {index} state is missing or unknown")
             state = None
+        if state == "PENDING":
+            continue
         submitted_at = _timestamp(
             item.get("submittedAt"), f"review {index} submittedAt", errors,
             required=True,
