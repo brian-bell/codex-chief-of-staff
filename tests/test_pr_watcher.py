@@ -86,6 +86,44 @@ class ClassificationTest(unittest.TestCase):
         self.assertEqual(result["expected_head_sha"], "prior-head")
         self.assertFalse(result["verdict_reusable"])
 
+    def test_sha_case_difference_does_not_invalidate_current_head(self) -> None:
+        payload = copy_payload()
+        pr = pull_request(payload)
+        observed_sha = "abcdef1234567890abcdef1234567890abcdef12"
+        pr["headRefOid"] = observed_sha
+        pr["commits"]["nodes"][0]["commit"]["oid"] = observed_sha
+        pr["reviews"]["nodes"][0]["commit"]["oid"] = observed_sha
+
+        result = classify_payload(
+            "owner/repo",
+            17,
+            payload,
+            expected_head_sha=observed_sha.upper(),
+            observed_at=OBSERVED_AT,
+        )
+
+        self.assertEqual(result["classification"], "merge-ready")
+        self.assertTrue(result["verdict_reusable"])
+
+    def test_different_sha_remains_stale_and_cannot_reuse_verdict(self) -> None:
+        payload = copy_payload()
+        pr = pull_request(payload)
+        observed_sha = "abcdef1234567890abcdef1234567890abcdef12"
+        pr["headRefOid"] = observed_sha
+        pr["commits"]["nodes"][0]["commit"]["oid"] = observed_sha
+        pr["reviews"]["nodes"][0]["commit"]["oid"] = observed_sha
+
+        result = classify_payload(
+            "owner/repo",
+            17,
+            payload,
+            expected_head_sha="ABCDEF1234567890ABCDEF1234567890ABCDEF13",
+            observed_at=OBSERVED_AT,
+        )
+
+        self.assertEqual(result["classification"], "stale-head")
+        self.assertFalse(result["verdict_reusable"])
+
     def test_partial_response_is_a_product_gate(self) -> None:
         result = classify_payload(
             "brian-bell/codex-chief-of-staff",

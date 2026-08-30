@@ -583,7 +583,10 @@ def classify_payload(
     if merge_status in PRODUCT_MERGE_STATES:
         product_reasons.append(f"merge state is {str(merge_status).lower()}")
     head_matches = bool(
-        observed_head and (expected_head_sha is None or observed_head == expected_head_sha)
+        observed_head and (
+            expected_head_sha is None
+            or observed_head.lower() == expected_head_sha.lower()
+        )
     )
     review_reusable = bool(
         reviews["decision"] is None
@@ -592,7 +595,7 @@ def classify_payload(
     verdict_reusable = bool(
         head_matches and review_reusable and not provider_errors and not schema_errors
     )
-    if observed_head and expected_head_sha and observed_head != expected_head_sha:
+    if observed_head and expected_head_sha and not head_matches:
         classification = "stale-head"
     elif provider_errors or schema_errors:
         classification = "product-gate"
