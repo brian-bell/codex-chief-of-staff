@@ -20,7 +20,17 @@ The first release does not include a forge-specific PR watcher, automatic merge 
 
 Chief of Staff requires Python 3.11 or newer and uses only the Python standard library. Installation also requires Codex with local plugin marketplace support.
 
-## Install from the personal marketplace
+## Quick start
+
+Tell any Codex task:
+
+```text
+Follow https://github.com/brian-bell/codex-chief-of-staff/blob/main/INIT.md
+```
+
+Codex installs or refreshes the plugin, initializes the ledger, and opens a pinned Chief of Staff task. Bring future work to that task.
+
+## Manual setup
 
 Clone the repository into the default personal marketplace's plugin directory:
 
