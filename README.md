@@ -13,8 +13,9 @@ Version 0.1 includes:
 - One task per work-order role.
 - Review verdicts bound to the current head SHA.
 - A Land gate that requires explicit merge authority and a current passing verdict.
+- A standard-library-only, read-only GitHub PR watcher with deterministic classification and bounded retries.
 
-The first release does not include a forge-specific PR watcher, automatic merge adapter, scheduled-task installer, or Grok Ship triage fetcher.
+The first release does not include PR creation or update automation, an automatic merge adapter, automatic scheduling, GitLab or stacked-PR support, or a Grok Ship triage fetcher. Publish and Land remain authority stages, not bundled forge automation.
 
 ## Requirements
 
@@ -91,6 +92,20 @@ List open work after a restart:
 ```
 
 The coordinator refreshes every linked Codex task, repository, pull request, and check before it resumes from ledger state.
+
+## Observe a GitHub pull request
+
+The babysit skill includes a live, read-only watcher. It uses the authenticated `gh` CLI already available to the operator and makes one fixed GraphQL query scoped to the exact repository and PR:
+
+```zsh
+./skills/babysit-pr/scripts/watch-pr \
+  --repo OWNER/REPO \
+  --pr NUMBER \
+  --expected-head HEAD_SHA \
+  --verdict-head REVIEWED_SHA
+```
+
+The watcher returns one compact JSON result after a complete observation. It reports stale heads, conflicts, current-head review blockers, product gates, pending checks, deterministic failures, typed rate-limit failures, or merge-ready state. Live acquisition and schema failures return safe nonzero JSON errors instead. The command has a bounded subprocess timeout and retries only typed transport or rate-limit failures. It does not push, comment, change PR state, merge, or enable auto-merge. Missing permissions, stale approvals, and partial connections block `merge-ready`. See [the watcher contract](skills/babysit-pr/references/watcher.md) for precedence, evidence fields, and retry behavior.
 
 ## Development
 

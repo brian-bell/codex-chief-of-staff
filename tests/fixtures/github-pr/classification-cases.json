@@ -1,0 +1,8 @@
+[
+  {"classification":"conflict","overrides":{"mergeable":"CONFLICTING","mergeStateStatus":"DIRTY"}},
+  {"classification":"blocking-review-feedback","overrides":{"reviewDecision":"CHANGES_REQUESTED","reviewThreads":{"nodes":[{"id":"PRRT_1","isOutdated":false,"isResolved":false,"comments":{"nodes":[{"author":{"login":"reviewer"},"id":"PRRC_1","createdAt":"2026-08-28T12:06:00Z"}]}}],"totalCount":1}}},
+  {"classification":"product-gate","overrides":{"isDraft":true}},
+  {"classification":"checks-pending","overrides":{"statusCheckRollup":{"contexts":{"nodes":[{"__typename":"CheckRun","databaseId":1,"name":"test","status":"IN_PROGRESS","conclusion":null,"startedAt":"2026-08-28T12:01:00Z","completedAt":null,"detailsUrl":"https://github.com/example/project/actions/runs/1"}]},"state":"PENDING"}}},
+  {"classification":"deterministic-check-failure","overrides":{"statusCheckRollup":{"contexts":{"nodes":[{"__typename":"CheckRun","databaseId":1,"name":"test","status":"COMPLETED","conclusion":"FAILURE","startedAt":"2026-08-28T12:01:00Z","completedAt":"2026-08-28T12:05:00Z","detailsUrl":"https://github.com/example/project/actions/runs/1","output":{"title":"Unit assertion failed","summary":"3 tests failed","annotationsCount":3}}]},"state":"FAILURE"}}},
+  {"classification":"plausible-transient-failure","overrides":{},"payloadErrors":[{"path":[],"type":"RATE_LIMITED"}]}
+]

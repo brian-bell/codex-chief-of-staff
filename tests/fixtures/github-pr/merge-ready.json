@@ -1,0 +1,29 @@
+{
+  "data": {
+    "repository": {
+      "branchProtectionRules": {"nodes": [{"pattern": "main", "requiredApprovingReviewCount": 1, "requiredStatusCheckContexts": ["test"], "requiresApprovingReviews": true, "requiresStatusChecks": true}], "pageInfo": {"hasNextPage": false, "hasPreviousPage": false}, "totalCount": 1},
+      "pullRequest": {
+        "baseRefName": "main",
+        "comments": {"totalCount": 2},
+        "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "isDraft": false,
+        "labels": {"nodes": [], "pageInfo": {"hasNextPage": false, "hasPreviousPage": false}, "totalCount": 0},
+        "mergeStateStatus": "CLEAN",
+        "mergeable": "MERGEABLE",
+        "reviewDecision": "APPROVED",
+        "reviewThreads": {"nodes": [], "pageInfo": {"hasNextPage": false, "hasPreviousPage": false}, "totalCount": 0},
+        "reviews": {"nodes": [{"author": {"login": "reviewer"}, "commit": {"oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, "id": "PRR_1", "state": "APPROVED", "submittedAt": "2026-08-28T12:00:00Z"}], "pageInfo": {"hasNextPage": false, "hasPreviousPage": false}, "totalCount": 1},
+        "state": "OPEN",
+        "statusCheckRollup": {
+          "contexts": {
+            "nodes": [{"__typename": "CheckRun", "completedAt": "2026-08-28T12:05:00Z", "conclusion": "SUCCESS", "databaseId": 1, "detailsUrl": "https://github.com/example/project/actions/runs/1", "name": "test", "startedAt": "2026-08-28T12:01:00Z", "status": "COMPLETED"}],
+            "pageInfo": {"hasNextPage": false, "hasPreviousPage": false},
+            "totalCount": 1
+          },
+          "state": "SUCCESS"
+        }
+      }
+    },
+    "rateLimit": {"cost": 1, "remaining": 4999, "resetAt": "2026-08-28T13:00:00Z"}
+  }
+}

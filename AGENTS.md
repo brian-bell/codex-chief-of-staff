@@ -79,4 +79,4 @@ Keep one writer per branch or worktree. Review tasks are read-only unless a sepa
 
 ## Current limits
 
-Version 0.1 does not bundle a forge-specific pull-request watcher, automatic merge adapter, scheduled-task installer, or Grok Ship triage fetcher. Do not document those as implemented. Use the available Codex task tools and a read-only forge connector or CLI where the skills call for live evidence.
+Version 0.1 bundles a read-only GitHub pull-request watcher. It does not bundle PR creation or update automation, an automatic merge adapter, a scheduled-task installer, GitLab or stacked-PR support, or a Grok Ship triage fetcher. Do not document those limits as implemented. Use the available Codex task tools and a read-only forge connector or CLI where the skills call for other live evidence.

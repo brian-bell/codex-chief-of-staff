@@ -1,0 +1,35 @@
+{
+  "check_runs": [
+    {"conclusion": "SUCCESS", "expected": "merge-ready", "status": "COMPLETED"},
+    {"conclusion": null, "expected": "checks-pending", "status": "IN_PROGRESS"},
+    {"conclusion": null, "expected": "checks-pending", "status": "QUEUED"},
+    {"conclusion": "ACTION_REQUIRED", "expected": "deterministic-check-failure", "status": "COMPLETED"},
+    {"conclusion": "CANCELLED", "expected": "deterministic-check-failure", "status": "COMPLETED"},
+    {"conclusion": "FAILURE", "expected": "deterministic-check-failure", "status": "COMPLETED"},
+    {"conclusion": "NEUTRAL", "expected": "deterministic-check-failure", "status": "COMPLETED"},
+    {"conclusion": "SKIPPED", "expected": "deterministic-check-failure", "status": "COMPLETED"},
+    {"conclusion": "STALE", "expected": "deterministic-check-failure", "status": "COMPLETED"},
+    {"conclusion": "STARTUP_FAILURE", "expected": "deterministic-check-failure", "status": "COMPLETED"},
+    {"conclusion": "TIMED_OUT", "expected": "deterministic-check-failure", "status": "COMPLETED"},
+    {"conclusion": null, "expected": "product-gate", "status": "COMPLETED"},
+    {"conclusion": "SUCCESS", "expected": "product-gate", "status": null},
+    {"conclusion": "FUTURE_VALUE", "expected": "product-gate", "status": "COMPLETED"}
+  ],
+  "status_contexts": [
+    {"expected": "merge-ready", "state": "SUCCESS"},
+    {"expected": "checks-pending", "state": "PENDING"},
+    {"expected": "deterministic-check-failure", "state": "ERROR"},
+    {"expected": "deterministic-check-failure", "state": "FAILURE"},
+    {"expected": "product-gate", "state": null},
+    {"expected": "product-gate", "state": "FUTURE_VALUE"}
+  ],
+  "empty_rollups": [
+    {"expected": "merge-ready", "state": "SUCCESS"},
+    {"expected": "checks-pending", "state": "PENDING"},
+    {"expected": "checks-pending", "state": "EXPECTED"},
+    {"expected": "deterministic-check-failure", "state": "FAILURE"},
+    {"expected": "deterministic-check-failure", "state": "ERROR"},
+    {"expected": "product-gate", "state": null},
+    {"expected": "product-gate", "state": "FUTURE_VALUE"}
+  ]
+}
