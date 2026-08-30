@@ -47,6 +47,29 @@ class PullRequestWatcherTest(unittest.TestCase):
         )
         self.assertRegex(result["fingerprint"], r"^sha256:[0-9a-f]{64}$")
 
+    def test_null_status_check_rollup_means_no_checks(self) -> None:
+        payload = self.load()
+        repository = payload["data"]["repository"]
+        repository["pullRequest"]["statusCheckRollup"] = None
+
+        result = classify_github_response(
+            "example/project", 17, payload, clock=lambda: NOW
+        )
+
+        self.assertEqual(result["classification"], "checks-pending")
+
+        rule = repository["branchProtectionRules"]["nodes"][0]
+        rule["requiresStatusChecks"] = False
+        rule["requiredStatusCheckContexts"] = []
+
+        result = classify_github_response(
+            "example/project", 17, payload, clock=lambda: NOW
+        )
+
+        self.assertEqual(result["classification"], "merge-ready")
+        self.assertEqual(result["checks"], [])
+        self.assertFalse(result["partial_response"]["active"])
+
     def test_changed_head_precedes_other_conditions_and_invalidates_verdict(self) -> None:
         payload = self.load()
         pr = payload["data"]["repository"]["pullRequest"]

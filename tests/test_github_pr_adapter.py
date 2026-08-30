@@ -79,6 +79,23 @@ class GitHubAdapterTest(unittest.TestCase):
         self.assertEqual(payload["data"]["repository"]["pullRequest"]["headRefOid"], "a" * 40)
         self.assertEqual(len(calls), 1)
 
+    def test_adapter_accepts_null_status_check_rollup(self) -> None:
+        payload = json.loads(FIXTURE.read_text())
+        payload["data"]["repository"]["pullRequest"]["statusCheckRollup"] = None
+        adapter = GitHubCliAdapter(
+            ReadOnlyGitHubCommandRunner(
+                executor=lambda argv, timeout: subprocess.CompletedProcess(
+                    argv, 0, json.dumps(payload), ""
+                )
+            )
+        )
+
+        result = adapter.fetch("example/project", 17)
+
+        self.assertIsNone(
+            result["data"]["repository"]["pullRequest"]["statusCheckRollup"]
+        )
+
     def test_transport_timeout_is_explicit_and_retries_without_off_by_one(self) -> None:
         calls = []
 

@@ -205,9 +205,18 @@ def classify_github_response(
     valid_review_decision = (
         "reviewDecision" in pr and _nullable_string(review_decision)
     )
-    rollup = pr.get("statusCheckRollup")
-    rollup = rollup if isinstance(rollup, Mapping) else {}
-    contexts = rollup.get("contexts")
+    raw_rollup = pr.get("statusCheckRollup")
+    rollup_is_null = "statusCheckRollup" in pr and raw_rollup is None
+    rollup = raw_rollup if isinstance(raw_rollup, Mapping) else {}
+    contexts = (
+        {
+            "nodes": [],
+            "pageInfo": {"hasNextPage": False, "hasPreviousPage": False},
+            "totalCount": 0,
+        }
+        if rollup_is_null
+        else rollup.get("contexts")
+    )
     contexts = contexts if isinstance(contexts, Mapping) else {}
     check_nodes = contexts.get("nodes")
     check_nodes = (
@@ -384,8 +393,11 @@ def classify_github_response(
         + ([] if valid_review_decision else ["reviewDecision"])
         + (
             []
-            if not isinstance(rollup, Mapping)
-            or _pr_scalar_is_valid("state", rollup.get("state"))
+            if rollup_is_null
+            or (
+                isinstance(raw_rollup, Mapping)
+                and _pr_scalar_is_valid("state", rollup.get("state"))
+            )
             else ["statusCheckRollup.state"]
         )
         + [
@@ -500,7 +512,9 @@ def classify_github_response(
     pending_checks = [item for item in checks if item["outcome"] == "pending"]
     failed_checks = [item for item in checks if item["outcome"] == "failure"]
     rollup_state = rollup.get("state")
-    if rollup_state == "SUCCESS":
+    if rollup_is_null:
+        rollup_outcome = "success"
+    elif rollup_state == "SUCCESS":
         rollup_outcome = "success"
     elif rollup_state in {"EXPECTED", "PENDING"}:
         rollup_outcome = "pending"
