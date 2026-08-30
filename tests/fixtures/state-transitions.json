@@ -1,0 +1,15 @@
+{
+  "draft": ["queued", "cancelled", "superseded"],
+  "queued": ["dispatched", "cancelled", "superseded"],
+  "dispatched": ["running", "needs-attention", "failed", "cancelled"],
+  "running": ["needs-attention", "verifying", "review-required", "ready-to-publish", "blocked", "failed", "cancelled"],
+  "needs-attention": ["running", "blocked", "cancelled"],
+  "verifying": ["review-required", "ready-to-publish", "blocked", "failed"],
+  "review-required": ["ready-to-publish", "blocked", "failed"],
+  "ready-to-publish": ["published", "cancelled", "superseded"],
+  "published": ["babysitting", "merge-ready", "done", "superseded"],
+  "babysitting": ["needs-attention", "merge-ready", "blocked", "failed"],
+  "merge-ready": ["awaiting-merge-authority", "landing", "done"],
+  "awaiting-merge-authority": ["landing", "cancelled"],
+  "landing": ["done", "blocked", "failed"]
+}

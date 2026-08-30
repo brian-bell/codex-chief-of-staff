@@ -1,0 +1,27 @@
+[
+  {
+    "name": "transient-worker-failure",
+    "evidence": "Task host disconnected once",
+    "expected": "retry-once"
+  },
+  {
+    "name": "stale-review",
+    "evidence": "Live head differs from verdict head",
+    "expected": "invalidate-verdict"
+  },
+  {
+    "name": "duplicate-writer",
+    "evidence": "A worker role is already linked",
+    "expected": "reject-second-mapping"
+  },
+  {
+    "name": "coordinator-restart",
+    "evidence": "Open work exists after process restart",
+    "expected": "refresh-live-state-before-resume"
+  },
+  {
+    "name": "changed-direction",
+    "evidence": "User supersedes the original outcome",
+    "expected": "record-event-and-stop-affected-worker"
+  }
+]

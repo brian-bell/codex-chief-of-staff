@@ -1,0 +1,14 @@
+---
+name: babysit-pr
+description: Follow an authorized pull request through CI and review feedback until it is merge-ready or has a named blocker, while keeping Land as a separate authority stage. Use for an existing Chief of Staff PR work order.
+---
+
+# Babysit PR
+
+Confirm the repository, PR, owning branch, current head SHA, allowed writes, required checks, and review bar. Refresh live forge state before each decision.
+
+Classify the current state as one of: checks pending, deterministic check failure, plausible transient failure, blocking review feedback, conflict, product gate, merge-ready, or stale head. Record the evidence that supports the classification.
+
+Address CI or review feedback only when the brief grants PR-maintenance authority and the change remains in scope. Verify and push each fix through the owning branch, then record the new head. A new head invalidates prior review evidence.
+
+Do not retry an identical deterministic failure as a flake. Do not reply publicly unless comments are authorized. Stop at merge-ready. Never merge or arm automatic merge from this skill.

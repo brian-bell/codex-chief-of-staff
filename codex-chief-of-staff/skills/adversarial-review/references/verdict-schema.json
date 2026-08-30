@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Chief of Staff review verdict",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "work_id",
+    "repository",
+    "base",
+    "head_sha",
+    "verdict",
+    "risk",
+    "findings",
+    "verification",
+    "reviewer_task_id",
+    "created_at"
+  ],
+  "properties": {
+    "work_id": {"type": "string", "pattern": "^CS-[A-Za-z0-9._-]+$"},
+    "repository": {"type": "string", "minLength": 1},
+    "base": {"type": "string", "minLength": 1},
+    "head_sha": {"type": "string", "minLength": 6},
+    "verdict": {"enum": ["pass", "pass-with-notes", "fail", "blocked"]},
+    "risk": {"enum": ["low", "medium", "high", "critical"]},
+    "findings": {"type": "array", "items": {"type": "object"}},
+    "verification": {"type": "array", "items": {"type": "object"}},
+    "reviewer_task_id": {"type": ["string", "null"]},
+    "created_at": {"type": "string", "format": "date-time"}
+  }
+}

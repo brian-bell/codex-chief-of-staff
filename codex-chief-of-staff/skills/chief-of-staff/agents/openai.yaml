@@ -1,0 +1,6 @@
+interface:
+  display_name: "Chief of Staff"
+  short_description: "Coordinate inspectable Codex work orders"
+  default_prompt: "Use $chief-of-staff to coordinate this work with explicit authority and durable state."
+policy:
+  allow_implicit_invocation: true

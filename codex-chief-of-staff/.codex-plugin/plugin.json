@@ -1,0 +1,31 @@
+{
+  "name": "codex-chief-of-staff",
+  "version": "0.1.0",
+  "description": "Coordinate visible Codex tasks with explicit authority, durable work orders, and SHA-bound review evidence.",
+  "author": {
+    "name": "Chief of Staff contributors"
+  },
+  "keywords": [
+    "codex",
+    "coordination",
+    "work-orders",
+    "review"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Chief of Staff for Codex",
+    "shortDescription": "Coordinate inspectable Codex work",
+    "longDescription": "Route work into visible Codex tasks, preserve authority boundaries, record durable state, and bind review verdicts to exact Git heads.",
+    "developerName": "Chief of Staff contributors",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Use Chief of Staff to coordinate this work.",
+      "Show my open Chief of Staff work orders.",
+      "Resume the active work orders from the ledger."
+    ]
+  }
+}

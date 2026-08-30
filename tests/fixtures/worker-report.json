@@ -1,0 +1,19 @@
+{
+  "work_id": "CS-FIXTURE",
+  "status": "ready-to-publish",
+  "mode": "build",
+  "authority_used": "local-write",
+  "project": "Accounts",
+  "repository": "acme/accounts",
+  "environment": "worktree",
+  "branch": "codex/cs-fixture",
+  "head_sha": "abc123",
+  "files_changed": ["src/reset_store.py", "tests/test_reset_restart.py"],
+  "acceptance_results": [{"criterion": "Reset survives restart", "result": "pass"}],
+  "checks": [{"command": "python -m unittest", "result": "pass"}],
+  "real_interface_proof": ["Restart integration test passed"],
+  "artifacts": ["local branch codex/cs-fixture"],
+  "deviations": [],
+  "blockers": [],
+  "recommended_next_stage": "review"
+}

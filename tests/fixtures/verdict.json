@@ -1,0 +1,12 @@
+{
+  "work_id": "CS-FIXTURE",
+  "repository": "acme/accounts",
+  "base": "origin/main",
+  "head_sha": "abc123",
+  "verdict": "pass",
+  "risk": "medium",
+  "findings": [],
+  "verification": [{"command": "python -m unittest", "result": "pass"}],
+  "reviewer_task_id": "review-task-fixture",
+  "created_at": "2026-08-29T12:00:00Z"
+}

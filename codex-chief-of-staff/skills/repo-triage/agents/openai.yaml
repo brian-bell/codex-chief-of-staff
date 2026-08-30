@@ -1,0 +1,6 @@
+interface:
+  display_name: "Repository Triage"
+  short_description: "Classify a bounded repository queue"
+  default_prompt: "Use $repo-triage to inspect this bounded queue and return a report without writes."
+policy:
+  allow_implicit_invocation: false

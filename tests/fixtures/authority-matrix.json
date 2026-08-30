@@ -1,0 +1,37 @@
+{
+  "scout": {
+    "authority": "read-only",
+    "allowed": ["inspect", "report"],
+    "forbidden": ["tracked-file-write", "push", "pr-write", "merge"]
+  },
+  "build": {
+    "authority": "local-write",
+    "allowed": ["local-source-write", "local-verification"],
+    "forbidden": ["push", "pr-write", "merge"]
+  },
+  "review": {
+    "authority": "read-only",
+    "allowed": ["inspect", "verify", "verdict"],
+    "forbidden": ["worker-branch-write", "push", "merge"]
+  },
+  "publish": {
+    "authority": "publish",
+    "allowed": ["commit", "push", "pr-create", "pr-update"],
+    "forbidden": ["merge"]
+  },
+  "babysit": {
+    "authority": "pr-maintenance",
+    "allowed": ["authorized-fix", "push", "authorized-pr-comment"],
+    "forbidden": ["merge", "auto-merge"]
+  },
+  "land": {
+    "authority": "merge",
+    "allowed": ["refresh", "merge", "confirm-merge"],
+    "forbidden": ["unrelated-write"]
+  },
+  "triage": {
+    "authority": "read-only",
+    "allowed": ["bounded-fetch", "classify", "report"],
+    "forbidden": ["comment", "close", "merge"]
+  }
+}
