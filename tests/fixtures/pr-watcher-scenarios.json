@@ -1,0 +1,92 @@
+{
+  "blocking-review-feedback": {
+    "payload": {
+      "data": {"repository": {"pullRequest": {
+        "number": 17, "state": "OPEN", "headRefOid": "head-17", "isDraft": false,
+        "mergeable": "MERGEABLE", "mergeStateStatus": "BLOCKED",
+        "reviewDecision": "CHANGES_REQUESTED",
+        "commits": {"nodes": [{"commit": {"oid": "head-17", "statusCheckRollup": null}}]},
+        "reviews": {"nodes": [{"author": {"login": "reviewer"}, "state": "CHANGES_REQUESTED", "submittedAt": "2026-08-30T10:00:00Z", "commit": {"oid": "head-17"}}], "pageInfo": {"hasNextPage": false}},
+        "reviewThreads": {"nodes": [{"id": "PRRT_blocking_1", "isResolved": false, "isOutdated": false, "comments": {"nodes": [{"author": {"login": "reviewer"}, "createdAt": "2026-08-30T10:00:00Z"}]}}], "pageInfo": {"hasNextPage": false}}
+      }}}
+    }
+  },
+  "checks-pending": {
+    "payload": {
+      "data": {"repository": {"pullRequest": {
+        "number": 17, "state": "OPEN", "headRefOid": "head-17", "isDraft": false,
+        "mergeable": "MERGEABLE", "mergeStateStatus": "UNSTABLE", "reviewDecision": "APPROVED",
+        "commits": {"nodes": [{"commit": {"oid": "head-17", "statusCheckRollup": {"state": "PENDING", "contexts": {"nodes": [{"__typename": "CheckRun", "name": "unit", "status": "IN_PROGRESS", "conclusion": null, "detailsUrl": "https://example.test/check/1", "startedAt": "2026-08-30T10:00:00Z", "completedAt": null}], "pageInfo": {"hasNextPage": false}}}}}]},
+        "reviews": {"nodes": [], "pageInfo": {"hasNextPage": false}},
+        "reviewThreads": {"nodes": [], "pageInfo": {"hasNextPage": false}}
+      }}}
+    }
+  },
+  "conflict": {
+    "payload": {
+      "data": {"repository": {"pullRequest": {
+        "number": 17, "state": "OPEN", "headRefOid": "head-17", "isDraft": false,
+        "mergeable": "CONFLICTING", "mergeStateStatus": "DIRTY", "reviewDecision": "APPROVED",
+        "commits": {"nodes": [{"commit": {"oid": "head-17", "statusCheckRollup": null}}]},
+        "reviews": {"nodes": [], "pageInfo": {"hasNextPage": false}},
+        "reviewThreads": {"nodes": [], "pageInfo": {"hasNextPage": false}}
+      }}}
+    }
+  },
+  "deterministic-check-failure": {
+    "payload": {
+      "data": {"repository": {"pullRequest": {
+        "number": 17, "state": "OPEN", "headRefOid": "head-17", "isDraft": false,
+        "mergeable": "MERGEABLE", "mergeStateStatus": "UNSTABLE", "reviewDecision": "APPROVED",
+        "commits": {"nodes": [{"commit": {"oid": "head-17", "statusCheckRollup": {"state": "FAILURE", "contexts": {"nodes": [{"__typename": "CheckRun", "name": "unit", "status": "COMPLETED", "conclusion": "FAILURE", "detailsUrl": "https://example.test/check/2", "startedAt": "2026-08-30T10:00:00Z", "completedAt": "2026-08-30T10:02:00Z"}], "pageInfo": {"hasNextPage": false}}}}}]},
+        "reviews": {"nodes": [], "pageInfo": {"hasNextPage": false}},
+        "reviewThreads": {"nodes": [], "pageInfo": {"hasNextPage": false}}
+      }}}
+    }
+  },
+  "merge-ready": {
+    "payload": {
+      "data": {"repository": {"pullRequest": {
+        "number": 17, "state": "OPEN", "headRefOid": "head-17", "isDraft": false,
+        "mergeable": "MERGEABLE", "mergeStateStatus": "CLEAN", "reviewDecision": "APPROVED",
+        "commits": {"nodes": [{"commit": {"oid": "head-17", "statusCheckRollup": {"state": "SUCCESS", "contexts": {"nodes": [{"__typename": "CheckRun", "name": "unit", "status": "COMPLETED", "conclusion": "SUCCESS", "detailsUrl": "https://example.test/check/3", "startedAt": "2026-08-30T10:00:00Z", "completedAt": "2026-08-30T10:02:00Z"}], "pageInfo": {"hasNextPage": false}}}}}]},
+        "reviews": {"nodes": [{"author": {"login": "reviewer"}, "state": "APPROVED", "submittedAt": "2026-08-30T10:03:00Z", "commit": {"oid": "head-17"}}], "pageInfo": {"hasNextPage": false}},
+        "reviewThreads": {"nodes": [], "pageInfo": {"hasNextPage": false}}
+      }}}
+    }
+  },
+  "plausible-transient-failure": {
+    "payload": {
+      "data": {"repository": {"pullRequest": {
+        "number": 17, "state": "OPEN", "headRefOid": "head-17", "isDraft": false,
+        "mergeable": "MERGEABLE", "mergeStateStatus": "UNSTABLE", "reviewDecision": "APPROVED",
+        "commits": {"nodes": [{"commit": {"oid": "head-17", "statusCheckRollup": {"state": "FAILURE", "contexts": {"nodes": [{"__typename": "CheckRun", "name": "hosted-runner", "status": "COMPLETED", "conclusion": "TIMED_OUT", "detailsUrl": "https://example.test/check/4", "startedAt": "2026-08-30T10:00:00Z", "completedAt": "2026-08-30T10:30:00Z"}], "pageInfo": {"hasNextPage": false}}}}}]},
+        "reviews": {"nodes": [], "pageInfo": {"hasNextPage": false}},
+        "reviewThreads": {"nodes": [], "pageInfo": {"hasNextPage": false}}
+      }}}
+    }
+  },
+  "product-gate": {
+    "payload": {
+      "data": {"repository": {"pullRequest": {
+        "number": 17, "state": "OPEN", "headRefOid": "head-17", "isDraft": true,
+        "mergeable": "MERGEABLE", "mergeStateStatus": "DRAFT", "reviewDecision": "REVIEW_REQUIRED",
+        "commits": {"nodes": [{"commit": {"oid": "head-17", "statusCheckRollup": null}}]},
+        "reviews": {"nodes": [], "pageInfo": {"hasNextPage": false}},
+        "reviewThreads": {"nodes": [], "pageInfo": {"hasNextPage": false}}
+      }}}
+    }
+  },
+  "stale-head": {
+    "expected_head_sha": "old-head",
+    "payload": {
+      "data": {"repository": {"pullRequest": {
+        "number": 17, "state": "OPEN", "headRefOid": "new-head", "isDraft": false,
+        "mergeable": "MERGEABLE", "mergeStateStatus": "CLEAN", "reviewDecision": "APPROVED",
+        "commits": {"nodes": [{"commit": {"oid": "new-head", "statusCheckRollup": null}}]},
+        "reviews": {"nodes": [], "pageInfo": {"hasNextPage": false}},
+        "reviewThreads": {"nodes": [], "pageInfo": {"hasNextPage": false}}
+      }}}
+    }
+  }
+}

@@ -7,7 +7,13 @@ description: Follow an authorized pull request through CI and review feedback un
 
 Confirm the repository, PR, owning branch, current head SHA, allowed writes, required checks, and review bar. Refresh live forge state before each decision.
 
-Classify the current state as one of: checks pending, deterministic check failure, plausible transient failure, blocking review feedback, conflict, product gate, merge-ready, or stale head. Record the evidence that supports the classification.
+Run the bundled watcher before classifying GitHub state:
+
+```zsh
+./skills/babysit-pr/scripts/watch-pr --repo OWNER/REPOSITORY --pr NUMBER --expected-head SHA
+```
+
+Read [watcher.md](references/watcher.md) for the output contract and retry rules. Use the result's evidence and classification. Do not infer merge readiness from comments, logs, or a prior observation.
 
 Address CI or review feedback only when the brief grants PR-maintenance authority and the change remains in scope. Verify and push each fix through the owning branch, then record the new head. A new head invalidates prior review evidence.
 

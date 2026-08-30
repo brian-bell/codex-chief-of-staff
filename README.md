@@ -12,9 +12,10 @@ Version 0.1 includes:
 - Worker callbacks that wake the Chief task on completion or attention states.
 - One task per work-order role.
 - Review verdicts bound to the current head SHA.
+- A deterministic, read-only GitHub PR watcher with bounded transient retries.
 - A Land gate that requires explicit merge authority and a current passing verdict.
 
-The first release does not include a forge-specific PR watcher, automatic merge adapter, scheduled-task installer, or Grok Ship triage fetcher.
+The first release does not include an automatic merge adapter, scheduled-task installer, or Grok Ship triage fetcher. The watcher supports GitHub only and requires the authenticated `gh` CLI for live observations.
 
 ## Requirements
 
@@ -91,6 +92,17 @@ List open work after a restart:
 ```
 
 The coordinator refreshes every linked Codex task, repository, pull request, and check before it resumes from ledger state.
+
+Observe a GitHub pull request without changing it:
+
+```zsh
+./skills/babysit-pr/scripts/watch-pr \
+  --repo OWNER/REPOSITORY \
+  --pr NUMBER \
+  --expected-head REVIEWED_HEAD_SHA
+```
+
+With complete evidence, the command writes one bounded JSON result with the observed head, current checks and reviews, merge state, observation time, and classification. A changed head returns `stale-head`. Incomplete or unauthorized GitHub evidence produces a compact typed error on stderr and a nonzero exit.
 
 ## Development
 

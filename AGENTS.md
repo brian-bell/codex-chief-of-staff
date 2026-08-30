@@ -14,6 +14,7 @@ The plugin enforces staged authority. A Build work order may change local files 
 - `skills/adversarial-review/`, `skills/babysit-pr/`, and `skills/repo-triage/` define the specialized review, pull-request maintenance, and triage roles.
 - `src/codex_chief_of_staff/` implements the standard-library-only SQLite ledger and JSON CLI.
 - `skills/chief-of-staff/scripts/chief-of-staff-state` is the executable entry point. It adds `src/` to `sys.path` relative to the plugin root.
+- `skills/babysit-pr/scripts/watch-pr` is the read-only GitHub PR watcher entry point.
 - `tests/` contains CLI behavior tests and contract fixtures.
 - `templates/AGENTS.chief-of-staff.md` is a coordinator-task charter that users can copy into a dedicated Chief of Staff task.
 
@@ -50,6 +51,13 @@ Run the ledger CLI directly from the checkout:
 ./skills/chief-of-staff/scripts/chief-of-staff-state --db /tmp/chief-of-staff.db init
 ```
 
+Replay a PR watcher fixture or make one live read:
+
+```zsh
+./skills/babysit-pr/scripts/watch-pr --repo owner/repo --pr 1 --fixture /path/to/github-response.json
+./skills/babysit-pr/scripts/watch-pr --repo owner/repo --pr 1 --max-attempts 1
+```
+
 The default database is `~/.codex/data/codex-chief-of-staff/state.db`. Tests must pass `--db` and use temporary storage. Never let tests read or modify the default user ledger.
 
 ## Implementation rules
@@ -79,4 +87,4 @@ Keep one writer per branch or worktree. Review tasks are read-only unless a sepa
 
 ## Current limits
 
-Version 0.1 does not bundle a forge-specific pull-request watcher, automatic merge adapter, scheduled-task installer, or Grok Ship triage fetcher. Do not document those as implemented. Use the available Codex task tools and a read-only forge connector or CLI where the skills call for live evidence.
+Version 0.1 bundles a read-only GitHub pull-request watcher. It does not bundle an automatic merge adapter, scheduled-task installer, or Grok Ship triage fetcher. Do not document those as implemented. The watcher classifies evidence but does not maintain a PR, schedule follow-ups, or merge.

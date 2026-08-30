@@ -1,0 +1,18 @@
+{
+  "missing-permission": {
+    "error": {"kind": "permission", "message": "Resource not accessible by integration", "retryable": false}
+  },
+  "partial-response": {
+    "payload": {
+      "data": {"repository": {"pullRequest": {"number": 17, "headRefOid": "head-17"}}},
+      "errors": [{"type": "FORBIDDEN", "message": "Reviews are not visible to this token"}]
+    }
+  },
+  "rate-limit": {
+    "error": {"kind": "rate-limit", "message": "API rate limit exceeded", "retryable": true},
+    "payload": {
+      "data": null,
+      "errors": [{"type": "RATE_LIMITED", "message": "API rate limit exceeded"}]
+    }
+  }
+}
