@@ -4,10 +4,103 @@ import json
 import sqlite3
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 
 SCHEMA_VERSION = 1
+
+_SCHEMA_VERSION_TABLE = """
+CREATE TABLE IF NOT EXISTS schema_versions (
+    version INTEGER PRIMARY KEY,
+    applied_at INTEGER NOT NULL
+)
+"""
+
+_MIGRATIONS: tuple[tuple[int, tuple[str, ...]], ...] = (
+    (
+        1,
+        (
+            """
+            CREATE TABLE IF NOT EXISTS projects (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                codex_project_id TEXT,
+                repository TEXT,
+                source_control TEXT,
+                default_branch TEXT,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS work_orders (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                mode TEXT NOT NULL,
+                authority TEXT NOT NULL,
+                status TEXT NOT NULL,
+                project_id TEXT REFERENCES projects(id),
+                coordinator_task_id TEXT,
+                branch TEXT,
+                pull_request TEXT,
+                head_sha TEXT,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS events (
+                sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                work_order_id TEXT NOT NULL REFERENCES work_orders(id),
+                source_task_id TEXT,
+                event_type TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                idempotency_key TEXT UNIQUE,
+                created_at INTEGER NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS task_links (
+                work_order_id TEXT NOT NULL REFERENCES work_orders(id),
+                task_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                host_id TEXT,
+                environment TEXT NOT NULL,
+                status TEXT NOT NULL,
+                brief_digest TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                PRIMARY KEY (work_order_id, task_id),
+                UNIQUE (work_order_id, role)
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS verdicts (
+                id TEXT PRIMARY KEY,
+                work_order_id TEXT NOT NULL REFERENCES work_orders(id),
+                reviewer_task_id TEXT,
+                pull_request TEXT,
+                head_sha TEXT NOT NULL,
+                verdict TEXT NOT NULL,
+                risk TEXT NOT NULL,
+                evidence TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS gates (
+                id TEXT PRIMARY KEY,
+                work_order_id TEXT NOT NULL REFERENCES work_orders(id),
+                question TEXT NOT NULL,
+                status TEXT NOT NULL,
+                answer TEXT,
+                created_at INTEGER NOT NULL,
+                resolved_at INTEGER
+            )
+            """,
+        ),
+    ),
+)
 
 TRANSITIONS = {
     "draft": {"queued", "cancelled", "superseded"},
@@ -75,8 +168,23 @@ class StateError(RuntimeError):
 
 
 class Ledger:
-    def __init__(self, path: Path) -> None:
+    def __init__(
+        self,
+        path: Path,
+        *,
+        _migrations: Sequence[tuple[int, Sequence[str]]] | None = None,
+        _schema_version: int | None = None,
+    ) -> None:
         self.path = path
+        self._migrations = tuple(
+            (version, tuple(statements))
+            for version, statements in (
+                _MIGRATIONS if _migrations is None else _migrations
+            )
+        )
+        self._schema_version = (
+            SCHEMA_VERSION if _schema_version is None else _schema_version
+        )
 
     def connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path, timeout=5)
@@ -86,93 +194,49 @@ class Ledger:
         return connection
 
     def initialize(self) -> dict[str, int]:
+        _validate_migrations(self._migrations, self._schema_version)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.connect() as connection:
-            connection.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS schema_versions (
-                    version INTEGER PRIMARY KEY,
-                    applied_at INTEGER NOT NULL
-                );
-
-                CREATE TABLE IF NOT EXISTS projects (
-                    id TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    codex_project_id TEXT,
-                    repository TEXT,
-                    source_control TEXT,
-                    default_branch TEXT,
-                    created_at INTEGER NOT NULL,
-                    updated_at INTEGER NOT NULL
-                );
-
-                CREATE TABLE IF NOT EXISTS work_orders (
-                    id TEXT PRIMARY KEY,
-                    title TEXT NOT NULL,
-                    mode TEXT NOT NULL,
-                    authority TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    project_id TEXT REFERENCES projects(id),
-                    coordinator_task_id TEXT,
-                    branch TEXT,
-                    pull_request TEXT,
-                    head_sha TEXT,
-                    created_at INTEGER NOT NULL,
-                    updated_at INTEGER NOT NULL
-                );
-
-                CREATE TABLE IF NOT EXISTS events (
-                    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
-                    work_order_id TEXT NOT NULL REFERENCES work_orders(id),
-                    source_task_id TEXT,
-                    event_type TEXT NOT NULL,
-                    payload TEXT NOT NULL,
-                    idempotency_key TEXT UNIQUE,
-                    created_at INTEGER NOT NULL
-                );
-
-                CREATE TABLE IF NOT EXISTS task_links (
-                    work_order_id TEXT NOT NULL REFERENCES work_orders(id),
-                    task_id TEXT NOT NULL,
-                    role TEXT NOT NULL,
-                    host_id TEXT,
-                    environment TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    brief_digest TEXT NOT NULL,
-                    created_at INTEGER NOT NULL,
-                    updated_at INTEGER NOT NULL,
-                    PRIMARY KEY (work_order_id, task_id),
-                    UNIQUE (work_order_id, role)
-                );
-
-                CREATE TABLE IF NOT EXISTS verdicts (
-                    id TEXT PRIMARY KEY,
-                    work_order_id TEXT NOT NULL REFERENCES work_orders(id),
-                    reviewer_task_id TEXT,
-                    pull_request TEXT,
-                    head_sha TEXT NOT NULL,
-                    verdict TEXT NOT NULL,
-                    risk TEXT NOT NULL,
-                    evidence TEXT NOT NULL,
-                    created_at INTEGER NOT NULL
-                );
-
-                CREATE TABLE IF NOT EXISTS gates (
-                    id TEXT PRIMARY KEY,
-                    work_order_id TEXT NOT NULL REFERENCES work_orders(id),
-                    question TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    answer TEXT,
-                    created_at INTEGER NOT NULL,
-                    resolved_at INTEGER
-                );
-                """
+        connection = self.connect()
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(_SCHEMA_VERSION_TABLE)
+            applied = [
+                row["version"]
+                for row in connection.execute(
+                    "SELECT version FROM schema_versions ORDER BY version"
+                ).fetchall()
+            ]
+            _validate_applied_versions(
+                applied, self._migrations, self._schema_version
             )
-            connection.execute(
-                "INSERT OR IGNORE INTO schema_versions(version, applied_at) VALUES (?, ?)",
-                (SCHEMA_VERSION, _now()),
-            )
-        return {"schema_version": SCHEMA_VERSION}
+            for version, statements in self._migrations[len(applied) :]:
+                for statement in statements:
+                    connection.set_authorizer(_migration_authorizer)
+                    try:
+                        connection.execute(statement)
+                    finally:
+                        connection.set_authorizer(None)
+                connection.execute(
+                    "INSERT INTO schema_versions(version, applied_at) VALUES (?, ?)",
+                    (version, _now()),
+                )
+            connection.commit()
+        except BaseException:
+            try:
+                connection.set_authorizer(None)
+            except BaseException:
+                pass
+            try:
+                connection.rollback()
+            except BaseException:
+                pass
+            try:
+                connection.close()
+            except BaseException:
+                pass
+            raise
+        connection.close()
+        return {"schema_version": self._schema_version}
 
     def create_work_order(
         self,
@@ -822,6 +886,53 @@ class Ledger:
 
 def _now() -> int:
     return int(time.time())
+
+
+def _migration_authorizer(
+    action_code: int,
+    _argument_one: str | None,
+    _argument_two: str | None,
+    _database_name: str | None,
+    _trigger_name: str | None,
+) -> int:
+    if action_code in {sqlite3.SQLITE_TRANSACTION, sqlite3.SQLITE_SAVEPOINT}:
+        return sqlite3.SQLITE_DENY
+    return sqlite3.SQLITE_OK
+
+
+def _validate_migrations(
+    migrations: Sequence[tuple[int, Sequence[str]]], current_version: int
+) -> None:
+    versions = [version for version, _ in migrations]
+    if type(current_version) is not int or any(
+        type(version) is not int for version in versions
+    ):
+        raise StateError("schema and migration versions must be exact integers")
+    if not versions:
+        raise StateError("migration registry must contain version 1")
+    expected = list(range(1, len(versions) + 1))
+    if versions != expected:
+        raise StateError(
+            "migration versions must be positive, unique, ordered, and contiguous from 1"
+        )
+    if current_version != len(versions):
+        raise StateError(
+            f"current schema version {current_version} does not match migration registry"
+        )
+
+
+def _validate_applied_versions(
+    applied: Sequence[int],
+    migrations: Sequence[tuple[int, Sequence[str]]],
+    current_version: int,
+) -> None:
+    if applied and applied[-1] > current_version:
+        raise StateError(
+            f"database schema version {applied[-1]} is newer than supported version {current_version}"
+        )
+    registry_versions = [version for version, _ in migrations]
+    if list(applied) != registry_versions[: len(applied)]:
+        raise StateError("applied schema versions are not a contiguous registry prefix")
 
 
 def json_line(value: Any) -> str:
