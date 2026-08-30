@@ -1,6 +1,6 @@
 # Dispatch contract
 
-Send every peer task a complete brief. Keep simple work brief, but do not omit a field.
+Send every peer task a complete brief. Keep simple work brief, but do not omit a field. Do not repeat standing Build or Review policy in the brief; include only facts, constraints, and checks specific to this work order.
 
 ```text
 WORK ID
