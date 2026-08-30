@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .github_pr import GitHubClient, validate_repository
 from .pr_watcher import (
+    ObservationError,
     RetryPolicy,
     normalize_timestamp,
     observe_with_retry,
@@ -56,10 +57,7 @@ def json_line(value: object, *, limit: int = MAX_OUTPUT_BYTES) -> str:
 
 
 def _error_line(kind: str, message: str) -> str:
-    return json_line(
-        {"error": {"kind": kind, "message": message}},
-        limit=1024,
-    )
+    return json_line({"error": {"kind": kind, "message": message}}, limit=1024)
 
 
 def _read_fixture(path: Path) -> dict[str, object]:
@@ -79,22 +77,6 @@ def _read_fixture(path: Path) -> dict[str, object]:
     return payload
 
 
-def _result_error_kind(result: dict[str, object]) -> str | None:
-    provider_errors = result["provider_errors"]
-    if provider_errors:
-        kinds = {error["kind"] for error in provider_errors}
-        if "permission" in kinds:
-            return "permission"
-        if "rate-limit" in kinds and kinds == {"rate-limit"}:
-            return "rate-limit"
-        if "transport" in kinds:
-            return "transport"
-        return "acquisition"
-    if result["schema_errors"]:
-        return "schema"
-    return None
-
-
 def run(argv: list[str] | None = None) -> int:
     try:
         args = build_parser().parse_args(argv)
@@ -106,7 +88,7 @@ def run(argv: list[str] | None = None) -> int:
             raise CliError("argument", "PR number must be a positive integer")
         if args.expected_head:
             if (
-                len(args.expected_head) not in {40, 64}
+                len(args.expected_head) != 40
                 or any(
                     character not in "0123456789abcdefABCDEF"
                     for character in args.expected_head
@@ -141,14 +123,20 @@ def run(argv: list[str] | None = None) -> int:
             policy=RetryPolicy(max_attempts=args.max_attempts, delays=delays),
             clock=clock,
         )
-        error_kind = _result_error_kind(result)
-        if error_kind:
-            raise CliError(error_kind, "GitHub evidence could not be classified safely")
         output = json_line(result)
+    except ObservationError as exc:
+        try:
+            error_output = json_line(exc.to_error(), limit=1024)
+        except CliError:
+            error_output = _error_line(
+                exc.kind, "GitHub evidence could not be classified safely"
+            )
+        print(error_output, file=sys.stderr, end="")
+        return 2
     except CliError as exc:
         print(_error_line(exc.kind, exc.safe_message), file=sys.stderr, end="")
         return 2
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
+    except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
         print(
             _error_line("internal", "watcher failed without exposing provider data"),
             file=sys.stderr,

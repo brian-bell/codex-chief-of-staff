@@ -23,6 +23,7 @@ from codex_chief_of_staff.github_pr import (  # noqa: E402
     classify_provider_error,
 )
 from codex_chief_of_staff.pr_watcher import (  # noqa: E402
+    ObservationError,
     RetryPolicy,
     classify_payload,
     observe_with_retry,
@@ -72,6 +73,89 @@ class ClassificationTest(unittest.TestCase):
                 self.assertIn("reviews", result)
                 self.assertIn("merge_state", result)
                 self.assertEqual(result["observed_at"], NORMALIZED_OBSERVED_AT)
+
+
+class LockedIssueContractTest(unittest.TestCase):
+    def test_partial_evidence_has_no_pr_classification(self) -> None:
+        payload = copy_payload()
+        pull_request(payload)["mergeable"] = []
+
+        with self.assertRaises(ObservationError) as raised:
+            classify_payload("owner/repo", 17, payload, observed_at=OBSERVED_AT)
+
+        self.assertEqual(raised.exception.acquisition_state, "partial")
+        self.assertEqual(raised.exception.kind, "schema")
+
+    def test_object_and_array_scalars_are_typed_schema_errors(self) -> None:
+        for field, value in (("state", []), ("mergeable", {})):
+            with self.subTest(field=field):
+                payload = copy_payload()
+                pull_request(payload)[field] = value
+
+                with self.assertRaises(ObservationError) as raised:
+                    classify_payload(
+                        "owner/repo", 17, payload, observed_at=OBSERVED_AT
+                    )
+
+                self.assertEqual(raised.exception.kind, "schema")
+
+    def test_github_approval_on_an_earlier_head_remains_valid(self) -> None:
+        payload = copy_payload()
+        review = pull_request(payload)["reviews"]["nodes"][0]
+        review["commit"]["oid"] = "earlier-head"
+
+        result = classify_payload("owner/repo", 17, payload, observed_at=OBSERVED_AT)
+
+        self.assertEqual(result["classification"], "merge-ready")
+        self.assertEqual(result["action_owner"], "none")
+
+    def test_lifecycle_state_precedes_conflicts_and_check_failures(self) -> None:
+        for state, is_draft in (("CLOSED", False), ("OPEN", True)):
+            with self.subTest(state=state, is_draft=is_draft):
+                payload = copy_payload("deterministic-check-failure")
+                pr = pull_request(payload)
+                pr["state"] = state
+                pr["isDraft"] = is_draft
+                pr["mergeable"] = "CONFLICTING"
+                pr["mergeStateStatus"] = "DIRTY"
+
+                result = classify_payload(
+                    "owner/repo", 17, payload, observed_at=OBSERVED_AT
+                )
+
+                self.assertEqual(result["classification"], "product-gate")
+                self.assertEqual(
+                    result["action_owner"], "author" if is_draft else "product"
+                )
+
+    def test_blocking_feedback_precedes_check_failure(self) -> None:
+        payload = copy_payload("deterministic-check-failure")
+        pull_request(payload)["reviewDecision"] = "CHANGES_REQUESTED"
+
+        result = classify_payload("owner/repo", 17, payload, observed_at=OBSERVED_AT)
+
+        self.assertEqual(result["classification"], "blocking-review-feedback")
+        self.assertEqual(result["action_owner"], "author")
+
+    def test_transient_ci_state_does_not_retry(self) -> None:
+        calls = 0
+
+        def fetch() -> dict[str, object]:
+            nonlocal calls
+            calls += 1
+            return copy_payload("plausible-transient-failure")
+
+        result = observe_with_retry(
+            fetch,
+            "owner/repo",
+            17,
+            policy=RetryPolicy(max_attempts=3, delays=(0, 0)),
+        )
+
+        self.assertEqual(result["classification"], "plausible-transient-failure")
+        self.assertEqual(result["action_owner"], "ci")
+        self.assertEqual(calls, 1)
+        self.assertFalse(result["retry_exhausted"])
 
     def test_changed_head_invalidates_prior_sha(self) -> None:
         result = classify_payload(
@@ -124,18 +208,17 @@ class ClassificationTest(unittest.TestCase):
         self.assertEqual(result["classification"], "stale-head")
         self.assertFalse(result["verdict_reusable"])
 
-    def test_partial_response_is_a_product_gate(self) -> None:
-        result = classify_payload(
-            "brian-bell/codex-chief-of-staff",
-            17,
-            PROVIDER_ERRORS["partial-response"]["payload"],
-            observed_at=OBSERVED_AT,
-        )
+    def test_partial_response_has_no_pr_classification(self) -> None:
+        with self.assertRaises(ObservationError) as raised:
+            classify_payload(
+                "brian-bell/codex-chief-of-staff",
+                17,
+                PROVIDER_ERRORS["partial-response"]["payload"],
+                observed_at=OBSERVED_AT,
+            )
 
-        self.assertEqual(result["classification"], "product-gate")
-        self.assertEqual(result["observed_head_sha"], "head-17")
-        self.assertTrue(result["provider_errors"])
-        self.assertTrue(result["schema_errors"])
+        self.assertEqual(raised.exception.acquisition_state, "partial")
+        self.assertEqual(raised.exception.kind, "permission")
 
     def test_repeated_observations_have_the_same_semantic_fingerprint(self) -> None:
         first = classify_payload(
@@ -157,12 +240,13 @@ class ClassificationTest(unittest.TestCase):
         payload = json.loads(json.dumps(SCENARIOS["merge-ready"]["payload"]))
         payload["data"]["repository"]["pullRequest"]["reviewDecision"] = "NEW_ENUM"
 
-        result = classify_payload(
-            "brian-bell/codex-chief-of-staff", 17, payload, observed_at=OBSERVED_AT
-        )
+        with self.assertRaises(ObservationError) as raised:
+            classify_payload(
+                "brian-bell/codex-chief-of-staff", 17, payload,
+                observed_at=OBSERVED_AT,
+            )
 
-        self.assertEqual(result["classification"], "product-gate")
-        self.assertIn("reviewDecision", " ".join(result["schema_errors"]))
+        self.assertIn("reviewDecision", " ".join(raised.exception.schema_errors))
 
     def test_closed_pr_cannot_be_merge_ready(self) -> None:
         payload = json.loads(json.dumps(SCENARIOS["merge-ready"]["payload"]))
@@ -183,12 +267,13 @@ class ClassificationTest(unittest.TestCase):
         )
         contexts["pageInfo"] = {"hasNextPage": True}
 
-        result = classify_payload(
-            "brian-bell/codex-chief-of-staff", 17, payload, observed_at=OBSERVED_AT
-        )
+        with self.assertRaises(ObservationError) as raised:
+            classify_payload(
+                "brian-bell/codex-chief-of-staff", 17, payload,
+                observed_at=OBSERVED_AT,
+            )
 
-        self.assertEqual(result["classification"], "product-gate")
-        self.assertIn("truncated", " ".join(result["schema_errors"]))
+        self.assertIn("truncated", " ".join(raised.exception.schema_errors))
 
     def test_unknown_check_conclusion_cannot_be_merge_ready(self) -> None:
         payload = json.loads(json.dumps(SCENARIOS["merge-ready"]["payload"]))
@@ -198,27 +283,91 @@ class ClassificationTest(unittest.TestCase):
         )
         check["conclusion"] = "NEW_ENUM"
 
-        result = classify_payload(
-            "brian-bell/codex-chief-of-staff", 17, payload, observed_at=OBSERVED_AT
-        )
+        with self.assertRaises(ObservationError) as raised:
+            classify_payload(
+                "brian-bell/codex-chief-of-staff", 17, payload,
+                observed_at=OBSERVED_AT,
+            )
 
-        self.assertEqual(result["classification"], "product-gate")
-        self.assertIn("check run", " ".join(result["schema_errors"]))
+        self.assertIn("check run", " ".join(raised.exception.schema_errors))
 
 
 class StrictSchemaRegressionTest(unittest.TestCase):
+    def test_malformed_scalar_type_matrix_is_always_partial(self) -> None:
+        missing = object()
+        check_container = lambda pr: (
+            pr["commits"]["nodes"][0]["commit"]
+            ["statusCheckRollup"]["contexts"]["nodes"][0]
+        )
+        cases = (
+            (
+                "enum",
+                lambda pr: pr,
+                "mergeable",
+                (missing, None, 0, False, [], {}, "NEW_ENUM", "X" * 300),
+            ),
+            (
+                "boolean",
+                lambda pr: pr,
+                "isDraft",
+                (missing, None, 0, "false", [], {}, "X" * 300),
+            ),
+            (
+                "text",
+                check_container,
+                "name",
+                (missing, None, 0, False, [], {}, "", "X" * 300),
+            ),
+            (
+                "timestamp",
+                check_container,
+                "completedAt",
+                (missing, None, 0, False, [], {}, "yesterday", "X" * 300),
+            ),
+            (
+                "integer",
+                lambda pr: pr,
+                "number",
+                (missing, None, "17", False, [], {}, -1, "X" * 300),
+            ),
+            (
+                "oid",
+                lambda pr: pr,
+                "headRefOid",
+                (missing, None, 0, False, [], {}, "bad oid!", "X" * 300),
+            ),
+            (
+                "pagination-boolean",
+                lambda pr: pr["reviews"]["pageInfo"],
+                "hasNextPage",
+                (missing, None, 0, "false", [], {}, "X" * 300),
+            ),
+        )
+        for category, container_for, field, values in cases:
+            for value in values:
+                with self.subTest(category=category, value=repr(value)[:40]):
+                    payload = copy_payload()
+                    container = container_for(pull_request(payload))
+                    if value is missing:
+                        container.pop(field)
+                    else:
+                        container[field] = value
+
+                    with self.assertRaises(ObservationError) as raised:
+                        classify_payload(
+                            "owner/repo", 17, payload, observed_at=OBSERVED_AT
+                        )
+
+                    self.assertEqual(raised.exception.acquisition_state, "partial")
+                    self.assertEqual(raised.exception.kind, "schema")
+
     def test_missing_connection_page_info_cannot_be_merge_ready(self) -> None:
         payload = copy_payload()
         del pull_request(payload)["reviews"]["pageInfo"]
-        result = classify_payload(
-            "owner/repo",
-            17,
-            payload,
-            observed_at=OBSERVED_AT,
-        )
+        with self.assertRaises(ObservationError) as raised:
+            classify_payload("owner/repo", 17, payload, observed_at=OBSERVED_AT)
 
-        self.assertEqual(result["classification"], "product-gate")
-        self.assertIn("pageInfo", " ".join(result["schema_errors"]))
+        self.assertIn("pageInfo", " ".join(raised.exception.schema_errors))
 
     def test_rollup_failure_with_successful_child_is_product_gated(self) -> None:
         payload = copy_payload()
@@ -227,26 +376,22 @@ class StrictSchemaRegressionTest(unittest.TestCase):
         commit["oid"] = pr["headRefOid"]
         commit["statusCheckRollup"]["state"] = "FAILURE"
 
-        result = classify_payload(
-            "owner/repo", 17, payload, observed_at=OBSERVED_AT
-        )
+        with self.assertRaises(ObservationError) as raised:
+            classify_payload("owner/repo", 17, payload, observed_at=OBSERVED_AT)
 
-        self.assertEqual(result["classification"], "product-gate")
-        self.assertIn("contradicts", " ".join(result["schema_errors"]))
+        self.assertIn("contradicts", " ".join(raised.exception.schema_errors))
 
     def test_check_rollup_must_belong_to_observed_head(self) -> None:
         payload = copy_payload()
         pr = pull_request(payload)
         pr["commits"]["nodes"][0]["commit"]["oid"] = "old-head"
 
-        result = classify_payload(
-            "owner/repo", 17, payload, observed_at=OBSERVED_AT
-        )
+        with self.assertRaises(ObservationError) as raised:
+            classify_payload("owner/repo", 17, payload, observed_at=OBSERVED_AT)
 
-        self.assertEqual(result["classification"], "product-gate")
-        self.assertIn("observed head", " ".join(result["schema_errors"]))
+        self.assertIn("observed head", " ".join(raised.exception.schema_errors))
 
-    def test_invalid_scalar_and_pagination_types_are_product_gated(self) -> None:
+    def test_invalid_scalar_and_pagination_types_are_schema_errors(self) -> None:
         mutations = (
             lambda pr: pr.__setitem__("isDraft", 0),
             lambda pr: pr["reviews"].__setitem__("pageInfo", {"hasNextPage": 0}),
@@ -258,11 +403,11 @@ class StrictSchemaRegressionTest(unittest.TestCase):
             with self.subTest(mutation=mutate):
                 payload = copy_payload()
                 mutate(pull_request(payload))
-                result = classify_payload(
-                    "owner/repo", 17, payload, observed_at=OBSERVED_AT
-                )
-                self.assertEqual(result["classification"], "product-gate")
-                self.assertTrue(result["schema_errors"])
+                with self.assertRaises(ObservationError) as raised:
+                    classify_payload(
+                        "owner/repo", 17, payload, observed_at=OBSERVED_AT
+                    )
+                self.assertEqual(raised.exception.kind, "schema")
 
     def test_connection_node_limit_is_enforced(self) -> None:
         payload = copy_payload()
@@ -270,12 +415,10 @@ class StrictSchemaRegressionTest(unittest.TestCase):
         reviews = pr["reviews"]["nodes"]
         reviews.extend(json.loads(json.dumps(reviews[0])) for _ in range(100))
 
-        result = classify_payload(
-            "owner/repo", 17, payload, observed_at=OBSERVED_AT
-        )
+        with self.assertRaises(ObservationError) as raised:
+            classify_payload("owner/repo", 17, payload, observed_at=OBSERVED_AT)
 
-        self.assertEqual(result["classification"], "product-gate")
-        self.assertIn("100-node limit", " ".join(result["schema_errors"]))
+        self.assertIn("100-node limit", " ".join(raised.exception.schema_errors))
 
 
 class CurrentHeadReviewRegressionTest(unittest.TestCase):
@@ -293,10 +436,9 @@ class CurrentHeadReviewRegressionTest(unittest.TestCase):
         result = classify_payload("owner/repo", 17, payload, observed_at=OBSERVED_AT)
 
         self.assertEqual(result["classification"], "merge-ready")
-        self.assertEqual(result["schema_errors"], [])
         self.assertEqual(len(result["reviews"]["items"]), 1)
 
-    def test_old_head_approval_cannot_satisfy_merge_readiness(self) -> None:
+    def test_github_decision_keeps_an_old_head_approval_valid(self) -> None:
         payload = copy_payload()
         pr = pull_request(payload)
         pr["reviews"]["nodes"][0]["commit"]["oid"] = "old-head"
@@ -309,9 +451,9 @@ class CurrentHeadReviewRegressionTest(unittest.TestCase):
             observed_at=OBSERVED_AT,
         )
 
-        self.assertEqual(result["classification"], "product-gate")
-        self.assertFalse(result["verdict_reusable"])
-        self.assertFalse(result["reviews"]["items"][0]["applies_to_head"])
+        self.assertEqual(result["classification"], "merge-ready")
+        self.assertTrue(result["verdict_reusable"])
+        self.assertEqual(result["reviews"]["items"][0]["commit_oid"], "old-head")
 
     def test_later_comment_does_not_erase_current_head_approval(self) -> None:
         payload = copy_payload()
@@ -328,7 +470,6 @@ class CurrentHeadReviewRegressionTest(unittest.TestCase):
         result = classify_payload("owner/repo", 17, payload, observed_at=OBSERVED_AT)
 
         self.assertEqual(result["classification"], "merge-ready")
-        self.assertTrue(result["reviews"]["current_head_approval"])
         self.assertEqual(len(result["reviews"]["items"]), 2)
 
     def test_later_comment_does_not_erase_current_head_changes_request(self) -> None:
@@ -362,14 +503,16 @@ class CurrentHeadReviewRegressionTest(unittest.TestCase):
         result = classify_payload("owner/repo", 17, payload, observed_at=OBSERVED_AT)
 
         self.assertEqual(result["classification"], "merge-ready")
-        self.assertTrue(result["reviews"]["current_head_approval"])
         self.assertTrue(
-            any(not review["applies_to_head"] for review in result["reviews"]["items"])
+            any(
+                review["commit_oid"] == "old-head"
+                for review in result["reviews"]["items"]
+            )
         )
 
 
 class DeterministicNormalizationRegressionTest(unittest.TestCase):
-    def test_neutral_and_skipped_checks_match_a_successful_rollup(self) -> None:
+    def test_neutral_and_skipped_checks_are_deterministic_failures(self) -> None:
         for conclusion in ("NEUTRAL", "SKIPPED"):
             with self.subTest(conclusion=conclusion):
                 payload = copy_payload()
@@ -384,10 +527,11 @@ class DeterministicNormalizationRegressionTest(unittest.TestCase):
                     "owner/repo", 17, payload, observed_at=OBSERVED_AT
                 )
 
-                self.assertEqual(result["classification"], "merge-ready")
-                self.assertEqual(result["schema_errors"], [])
+                self.assertEqual(
+                    result["classification"], "deterministic-check-failure"
+                )
 
-    def test_queued_rerun_without_started_at_supersedes_old_failure(self) -> None:
+    def test_repeated_check_without_timestamp_is_partial(self) -> None:
         payload = copy_payload()
         pr = pull_request(payload)
         rollup = pr["commits"]["nodes"][0]["commit"]["statusCheckRollup"]
@@ -413,12 +557,10 @@ class DeterministicNormalizationRegressionTest(unittest.TestCase):
         rollup["state"] = "PENDING"
         rollup["contexts"]["nodes"].append(queued)
 
-        result = classify_payload("owner/repo", 17, payload, observed_at=OBSERVED_AT)
+        with self.assertRaises(ObservationError) as raised:
+            classify_payload("owner/repo", 17, payload, observed_at=OBSERVED_AT)
 
-        self.assertEqual(result["classification"], "checks-pending")
-        self.assertEqual(result["schema_errors"], [])
-        self.assertEqual(len(result["checks"]), 1)
-        self.assertEqual(result["checks"][0]["status"], "QUEUED")
+        self.assertIn("timestamps", " ".join(raised.exception.schema_errors))
 
     def test_distinct_review_thread_ids_survive_normalization_and_reordering(self) -> None:
         payload = copy_payload()
@@ -485,7 +627,7 @@ class DeterministicNormalizationRegressionTest(unittest.TestCase):
         self.assertEqual(first["fingerprint"], second["fingerprint"])
         self.assertEqual(len(first["checks"]), 1)
 
-    def test_provider_error_order_and_prose_do_not_change_fingerprint(self) -> None:
+    def test_provider_error_order_and_prose_do_not_change_typed_error(self) -> None:
         first_payload = {
             "data": None,
             "errors": [
@@ -501,30 +643,28 @@ class DeterministicNormalizationRegressionTest(unittest.TestCase):
             ],
         }
 
-        first = classify_payload(
-            "owner/repo", 17, first_payload, observed_at=OBSERVED_AT
-        )
-        second = classify_payload(
-            "owner/repo", 17, second_payload, observed_at=OBSERVED_AT
+        with self.assertRaises(ObservationError) as first_raised:
+            classify_payload("owner/repo", 17, first_payload, observed_at=OBSERVED_AT)
+        with self.assertRaises(ObservationError) as second_raised:
+            classify_payload("owner/repo", 17, second_payload, observed_at=OBSERVED_AT)
+
+        self.assertEqual(
+            first_raised.exception.provider_errors,
+            second_raised.exception.provider_errors,
         )
 
-        self.assertEqual(first["provider_errors"], second["provider_errors"])
-        self.assertEqual(first["fingerprint"], second["fingerprint"])
-
-    def test_invalid_provider_timestamps_are_product_gated(self) -> None:
+    def test_invalid_provider_timestamps_are_partial(self) -> None:
         payload = copy_payload()
         pr = pull_request(payload)
         check = pr["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["contexts"]["nodes"][0]
         check["completedAt"] = "yesterday"
 
-        result = classify_payload(
-            "owner/repo", 17, payload, observed_at=OBSERVED_AT
-        )
+        with self.assertRaises(ObservationError) as raised:
+            classify_payload("owner/repo", 17, payload, observed_at=OBSERVED_AT)
 
-        self.assertEqual(result["classification"], "product-gate")
-        self.assertIn("timestamp", " ".join(result["schema_errors"]))
+        self.assertIn("timestamp", " ".join(raised.exception.schema_errors))
 
-    def test_ambiguous_review_tie_is_canonical_and_product_gated(self) -> None:
+    def test_ambiguous_review_tie_is_a_canonical_partial_error(self) -> None:
         payload = copy_payload()
         pr = pull_request(payload)
         tied = json.loads(json.dumps(pr["reviews"]["nodes"][0]))
@@ -533,15 +673,18 @@ class DeterministicNormalizationRegressionTest(unittest.TestCase):
         reversed_payload = json.loads(json.dumps(payload))
         pull_request(reversed_payload)["reviews"]["nodes"].reverse()
 
-        first = classify_payload("owner/repo", 17, payload, observed_at=OBSERVED_AT)
-        second = classify_payload(
-            "owner/repo", 17, reversed_payload, observed_at=OBSERVED_AT
-        )
+        with self.assertRaises(ObservationError) as first_raised:
+            classify_payload("owner/repo", 17, payload, observed_at=OBSERVED_AT)
+        with self.assertRaises(ObservationError) as second_raised:
+            classify_payload(
+                "owner/repo", 17, reversed_payload, observed_at=OBSERVED_AT
+            )
 
-        self.assertEqual(first["classification"], "product-gate")
-        self.assertEqual(first["reviews"], second["reviews"])
-        self.assertEqual(first["fingerprint"], second["fingerprint"])
-        self.assertIn("ambiguous", " ".join(first["schema_errors"]))
+        self.assertEqual(
+            first_raised.exception.schema_errors,
+            second_raised.exception.schema_errors,
+        )
+        self.assertIn("ambiguous", " ".join(first_raised.exception.schema_errors))
 
     def test_retry_telemetry_does_not_change_success_fingerprint(self) -> None:
         clean = observe_with_retry(
@@ -573,7 +716,6 @@ class DeterministicNormalizationRegressionTest(unittest.TestCase):
         self.assertEqual(retried["classification"], "merge-ready")
         self.assertEqual(clean["fingerprint"], retried["fingerprint"])
         self.assertEqual(retried["retry_trace"], [{"kind": "rate-limit"}])
-        self.assertEqual(retried["provider_errors"], [])
 
 
 class MixedProviderErrorRegressionTest(unittest.TestCase):
@@ -591,18 +733,19 @@ class MixedProviderErrorRegressionTest(unittest.TestCase):
             calls.append(1)
             return payload
 
-        result = observe_with_retry(
-            fetch,
-            "owner/repo",
-            17,
-            policy=RetryPolicy(max_attempts=3, delays=(0, 0)),
-            clock=lambda: OBSERVED_AT,
-            sleep=lambda _: None,
-        )
+        with self.assertRaises(ObservationError) as raised:
+            observe_with_retry(
+                fetch,
+                "owner/repo",
+                17,
+                policy=RetryPolicy(max_attempts=3, delays=(0, 0)),
+                clock=lambda: OBSERVED_AT,
+                sleep=lambda _: None,
+            )
 
         self.assertEqual(len(calls), 1)
-        self.assertFalse(result["retry_exhausted"])
-        self.assertEqual(result["provider_errors"][0]["kind"], "permission")
+        self.assertFalse(raised.exception.retry_exhausted)
+        self.assertEqual(raised.exception.provider_errors[0]["kind"], "permission")
 
 
 class RetryPolicyTest(unittest.TestCase):
@@ -622,7 +765,7 @@ class RetryPolicyTest(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertEqual(result["attempts"], 1)
 
-    def test_transient_check_failure_uses_bounded_retries(self) -> None:
+    def test_transient_check_failure_is_observed_once(self) -> None:
         calls = []
 
         def fetch() -> dict[str, object]:
@@ -635,9 +778,9 @@ class RetryPolicyTest(unittest.TestCase):
         )
 
         self.assertEqual(result["classification"], "plausible-transient-failure")
-        self.assertEqual(len(calls), 3)
-        self.assertEqual(result["attempts"], 3)
-        self.assertTrue(result["retry_exhausted"])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(result["attempts"], 1)
+        self.assertFalse(result["retry_exhausted"])
 
     def test_rate_limit_retries_are_bounded_and_return_evidence(self) -> None:
         calls = []
@@ -647,15 +790,16 @@ class RetryPolicyTest(unittest.TestCase):
             calls.append(1)
             raise ProviderError(**error)
 
-        result = observe_with_retry(
-            fetch, "owner/repo", 17, policy=RetryPolicy(max_attempts=2, delays=(0,)),
-            clock=lambda: OBSERVED_AT, sleep=lambda _: None,
-        )
+        with self.assertRaises(ObservationError) as raised:
+            observe_with_retry(
+                fetch, "owner/repo", 17,
+                policy=RetryPolicy(max_attempts=2, delays=(0,)),
+                clock=lambda: OBSERVED_AT, sleep=lambda _: None,
+            )
 
-        self.assertEqual(result["classification"], "product-gate")
         self.assertEqual(len(calls), 2)
-        self.assertEqual(result["provider_errors"][0]["kind"], "rate-limit")
-        self.assertTrue(result["retry_exhausted"])
+        self.assertEqual(raised.exception.provider_errors[0]["kind"], "rate-limit")
+        self.assertTrue(raised.exception.retry_exhausted)
 
     def test_graphql_rate_limit_response_retries_are_bounded(self) -> None:
         calls = []
@@ -664,15 +808,16 @@ class RetryPolicyTest(unittest.TestCase):
             calls.append(1)
             return PROVIDER_ERRORS["rate-limit"]["payload"]
 
-        result = observe_with_retry(
-            fetch, "owner/repo", 17, policy=RetryPolicy(max_attempts=2, delays=(0,)),
-            clock=lambda: OBSERVED_AT, sleep=lambda _: None,
-        )
+        with self.assertRaises(ObservationError) as raised:
+            observe_with_retry(
+                fetch, "owner/repo", 17,
+                policy=RetryPolicy(max_attempts=2, delays=(0,)),
+                clock=lambda: OBSERVED_AT, sleep=lambda _: None,
+            )
 
-        self.assertEqual(result["classification"], "product-gate")
         self.assertEqual(len(calls), 2)
-        self.assertEqual(result["provider_errors"][0]["kind"], "rate-limit")
-        self.assertTrue(result["retry_exhausted"])
+        self.assertEqual(raised.exception.provider_errors[0]["kind"], "rate-limit")
+        self.assertTrue(raised.exception.retry_exhausted)
 
     def test_missing_permission_does_not_retry(self) -> None:
         calls = []
@@ -682,14 +827,14 @@ class RetryPolicyTest(unittest.TestCase):
             calls.append(1)
             raise ProviderError(**error)
 
-        result = observe_with_retry(
-            fetch, "owner/repo", 17, policy=RetryPolicy(max_attempts=3),
-            clock=lambda: OBSERVED_AT, sleep=lambda _: None,
-        )
+        with self.assertRaises(ObservationError) as raised:
+            observe_with_retry(
+                fetch, "owner/repo", 17, policy=RetryPolicy(max_attempts=3),
+                clock=lambda: OBSERVED_AT, sleep=lambda _: None,
+            )
 
-        self.assertEqual(result["classification"], "product-gate")
         self.assertEqual(len(calls), 1)
-        self.assertEqual(result["provider_errors"][0]["kind"], "permission")
+        self.assertEqual(raised.exception.provider_errors[0]["kind"], "permission")
 
 
 class GitHubClientTest(unittest.TestCase):
@@ -710,7 +855,6 @@ class GitHubClientTest(unittest.TestCase):
         self.assertNotIn("--input", calls[0][0])
         self.assertTrue(calls[0][1]["check"])
         self.assertIn("reviewThreads(first: 100)", READ_ONLY_QUERY)
-        self.assertIn("databaseId", READ_ONLY_QUERY)
         self.assertIn("\n          id\n", READ_ONLY_QUERY)
 
     def test_graphql_schema_error_is_nonretryable_despite_connection_type_name(self) -> None:
@@ -723,19 +867,20 @@ class GitHubClientTest(unittest.TestCase):
             calls.append(1)
             raise error
 
-        result = observe_with_retry(
-            fetch,
-            "owner/repo",
-            17,
-            policy=RetryPolicy(max_attempts=3, delays=(0, 0)),
-            clock=lambda: OBSERVED_AT,
-            sleep=lambda _: None,
-        )
+        with self.assertRaises(ObservationError) as raised:
+            observe_with_retry(
+                fetch,
+                "owner/repo",
+                17,
+                policy=RetryPolicy(max_attempts=3, delays=(0, 0)),
+                clock=lambda: OBSERVED_AT,
+                sleep=lambda _: None,
+            )
 
         self.assertEqual(error.kind, "graphql")
         self.assertFalse(error.retryable)
         self.assertEqual(len(calls), 1)
-        self.assertEqual(result["attempts"], 1)
+        self.assertEqual(raised.exception.attempts, 1)
 
     def test_structured_graphql_errors_control_retry_classification(self) -> None:
         cases = (
@@ -841,7 +986,10 @@ class WatchPrCliTest(unittest.TestCase):
             )
 
         result = json.loads(completed.stdout)
+        self.assertEqual(result["acquisition_state"], "complete")
         self.assertEqual(result["classification"], "merge-ready")
+        self.assertEqual(result["action_owner"], "none")
+        self.assertFalse(result["verdict_reusable"])
         self.assertEqual(completed.stderr, "")
         self.assertEqual(completed.stdout.count("\n"), 1)
 
@@ -1015,6 +1163,14 @@ class WatchPrCliTest(unittest.TestCase):
                 "--expected-head",
                 "not-a-sha",
             ],
+            [
+                "--repo",
+                "owner/repo",
+                "--pr",
+                "17",
+                "--expected-head",
+                "a" * 64,
+            ],
         )
         for args in cases:
             with self.subTest(args=args):
@@ -1050,6 +1206,7 @@ class WatchPrCliTest(unittest.TestCase):
         self.assertLess(len(stderr.getvalue()), 1024)
         error = json.loads(stderr.getvalue())["error"]
         self.assertEqual(error["kind"], "permission")
+        self.assertEqual(error["provider_errors"][0]["code"], "permission")
         self.assertNotIn("secret-bearing", stderr.getvalue())
 
 

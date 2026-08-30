@@ -12,7 +12,7 @@ Version 0.1 includes:
 - Worker callbacks that wake the Chief task on completion or attention states.
 - One task per work-order role.
 - Review verdicts bound to the current head SHA.
-- A deterministic, read-only GitHub PR watcher with bounded transient retries.
+- A deterministic, read-only GitHub PR watcher with bounded acquisition retries.
 - A Land gate that requires explicit merge authority and a current passing verdict.
 
 The first release does not include an automatic merge adapter, scheduled-task installer, or Grok Ship triage fetcher. The watcher supports GitHub only and requires the authenticated `gh` CLI for live observations.
